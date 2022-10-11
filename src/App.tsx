@@ -16,6 +16,11 @@ type ModelVariation =
     | 'vit-b-16-8f'
     | 'vit-b-32-8f';
 
+interface PLotlyDataLayout {
+    data: Plotly.Data[];
+    layout: Partial<Plotly.Layout>;
+}
+
 interface TsneCategory {
     name: string;
     text: string[];
@@ -33,6 +38,19 @@ interface ClipSimilarity {
     text: string;
     classification: boolean;
     similarity: number; // [0, 1]
+}
+
+interface ConfusionTopK {
+    tp: number;
+    fn: number;
+    fp: number;
+    tn: number;
+    topkTextClassification: Map<string, boolean>;
+}
+
+interface SimilarityResponse {
+    similarities: Map<string, ClipSimilarity[]>;
+    confusion: Map<number, ConfusionTopK>;
 }
 
 function renderConfusionPopulation(population: number | null): string {
@@ -154,7 +172,7 @@ async function queryDeleteText(text: string) {
     if (!response.ok) return Promise.reject(response);
 }
 
-async function querySimilarities(): Promise<Map<string, ClipSimilarity[]>> {
+async function querySimilarities(): Promise<SimilarityResponse> {
     const response = await fetch(API_BASE_URL + `/similarity`, {
         // body: JSON.stringify({
         //   text,
@@ -166,7 +184,25 @@ async function querySimilarities(): Promise<Map<string, ClipSimilarity[]>> {
     if (!response.ok) return Promise.reject(response);
 
     const responseObj = await response.json();
-    return new Map(Object.entries(responseObj));
+    return {
+        similarities: new Map(Object.entries(responseObj.similarities)),
+        confusion: new Map(
+            Object.entries(responseObj.confusion).map(([topk, v]) => {
+                return [
+                    Number.parseInt(topk),
+                    {
+                        tp: (v as any).tp,
+                        fn: (v as any).fn,
+                        fp: (v as any).fp,
+                        tn: (v as any).tn,
+                        topkTextClassification: new Map(
+                            Object.entries((v as any).topk_text_classification)
+                        )
+                    } as ConfusionTopK
+                ];
+            })
+        )
+    };
 }
 
 async function queryUpdateTextClassification(
@@ -214,14 +250,54 @@ function getTopKSimilarity(
         .slice(0, sliceEnd);
 }
 
+function getConfusionMatrixData(
+    topk: number,
+    confusion: ConfusionTopK | undefined
+): PLotlyDataLayout {
+    if (!confusion)
+        return {
+            data: [],
+            layout: {
+                height: 320,
+                width: 380,
+                title: `Confusion Matrix: TOP ${topk}`
+            }
+        };
+
+    const { fp, tn, tp, fn } = confusion;
+
+    return {
+        data: [
+            {
+                type: 'heatmap',
+                x: ['Alarm', 'Not alarm'],
+                y: ['Not alarm', 'Alarm'],
+                z: [
+                    [fp, tn],
+                    [tp, fn]
+                ]
+            }
+        ],
+        layout: {
+            height: 320,
+            width: 380,
+            title: `Confusion Matrix: TOP ${topk}`,
+            annotations: [fp, tn, tp, fn].map((v, i) => ({
+                x: i % 2,
+                y: Math.floor(i / 2),
+                text: v.toFixed(),
+                font: { color: 'white', size: 26 },
+                showarrow: false
+            }))
+        }
+    };
+}
+
 function App() {
     const [isPositive, setPositive] = useState<boolean>(true);
     const [clips, setClips] = useState<{ index: string; category: string }[]>(
         []
     );
-    const [confusionMatrix, setConfusionMatrix] = useState<
-        Array<number | null>
-    >([null, null, null, null]);
     const [imagesTsne, setImagesTsne] = useState<Plotly.Data[]>();
     const [textsTsne, setTextsTsne] = useState<Plotly.Data[]>();
     const [texts, setTexts] = useState<
@@ -234,6 +310,9 @@ function App() {
     );
     const [similarityMap, setSimilarityMap] = useState<
         Map<string, ClipSimilarity[]>
+    >(new Map());
+    const [confusionMap, setConfusionMap] = useState<
+        Map<number, ConfusionTopK>
     >(new Map());
 
     const percentageColorScale = chroma.scale(chroma.brewer.Spectral);
@@ -261,7 +340,10 @@ function App() {
     useEffect(() => {
         if (!(texts && texts.length)) return;
 
-        querySimilarities().then((map) => setSimilarityMap(map));
+        querySimilarities().then(({ similarities, confusion }) => {
+            setConfusionMap(confusion);
+            setSimilarityMap(similarities);
+        });
         setLocalText(texts);
         queryTextsFeaturesTsne().then((textsTsneResponse) =>
             setTextsTsne(transformTsneResponseToPlotly(textsTsneResponse))
@@ -270,10 +352,18 @@ function App() {
 
     return (
         <div className="App">
-            <div className="top" style={{ fontSize: '40px' }}>
+            <div
+                className="top"
+                style={{
+                    fontSize: '40px',
+                    display: 'flex',
+                    justifyContent: 'center',
+                    margin: '6px auto 0 auto'
+                }}
+            >
                 <input
                     style={{
-                        minWidth: '400px',
+                        width: '700px',
                         height: '72px',
                         fontSize: '40px'
                     }}
@@ -294,7 +384,7 @@ function App() {
                     onClick={() => setPositive(!isPositive)}
                     style={{
                         margin: '0 6px',
-                        padding: '0 12px 7px 12px',
+                        padding: '7px 12px 12px',
                         border: '1px solid Gray',
                         borderRadius: '4px'
                     }}
@@ -302,16 +392,6 @@ function App() {
                     {isPositive ? '+' : '-'}
                 </span>
             </div>
-            {/* <div className='confusion-matrix' style={{display: 'grid', gridTemplateColumns: 'repeat(4, auto)'}}>
-        <div>TP</div>
-        <div>FN</div>
-        <div>FP</div>
-        <div>TN</div>
-        <div>{renderConfusionPopulation(confusionMatrix![0])}</div>
-        <div>{renderConfusionPopulation(confusionMatrix![1])}</div>
-        <div>{renderConfusionPopulation(confusionMatrix![2])}</div>
-        <div>{renderConfusionPopulation(confusionMatrix![3])}</div>
-      </div> */}
             <div
                 className="tsne-plots"
                 style={{ display: 'flex', gap: '20px' }}
@@ -326,6 +406,22 @@ function App() {
                     layout={{ height: 640, title: 'Texts Features' }}
                     style={{ flex: 1 }}
                 />
+            </div>
+            <div
+                style={{
+                    display: 'flex',
+                    gap: '35px',
+                    justifyContent: 'center'
+                }}
+            >
+                {Array.from(confusionMap.entries())
+                    .sort((a, b) => a[0] - b[0])
+                    .map(([topk, confusion], i) => (
+                        <Plot
+                            key={i}
+                            {...getConfusionMatrixData(topk, confusion)}
+                        />
+                    ))}
             </div>
             <div className="texts">
                 <h2>Texts</h2>
@@ -380,9 +476,9 @@ function App() {
                 className="images"
                 style={{
                     display: 'grid',
-                    gridTemplateColumns: '220px 180px auto',
+                    gridTemplateColumns: '220px 180px 180px auto',
                     margin: '0 auto',
-                    maxWidth: '880px',
+                    maxWidth: '1200px',
                     rowGap: '12px'
                 }}
             >
@@ -392,6 +488,9 @@ function App() {
                         Background: 'DodgerBlue',
                         Distraction: 'ForestGreen'
                     }[category];
+
+                    const isAlarm = category === 'Alarm';
+
                     return (
                         <React.Fragment key={i}>
                             <div>
@@ -400,15 +499,76 @@ function App() {
                                     src={`${API_BASE_URL}/image/${index}`}
                                     style={{ width: '100%' }}
                                 />
-                                <span style={{ textAlign: 'center' }}>
+                                <span
+                                    style={{
+                                        textAlign: 'center',
+                                        display: 'block'
+                                    }}
+                                >
                                     {index}
                                 </span>
                             </div>
                             <span
                                 className="clip-category"
-                                style={{ color: categoryColor }}
+                                style={{
+                                    color: categoryColor,
+                                    textAlign: 'center'
+                                }}
                             >
                                 {category}
+                            </span>
+                            <span className="text-classifications">
+                                {confusionMap &&
+                                    Array.from(confusionMap.entries())
+                                        .sort((a, b) => a[0] - b[0])
+                                        .map(
+                                            (
+                                                [
+                                                    topk,
+                                                    { topkTextClassification }
+                                                ],
+                                                ii
+                                            ) => {
+                                                const keyI =
+                                                    i * clips.length + ii;
+                                                if (
+                                                    !topkTextClassification.has(
+                                                        index
+                                                    )
+                                                )
+                                                    console.warn(
+                                                        `Missing ${index} in topk map`
+                                                    );
+                                                const textClassification =
+                                                    !!topkTextClassification.get(
+                                                        index
+                                                    );
+                                                return (
+                                                    <div key={keyI}>
+                                                        TOP {topk}:
+                                                        <span
+                                                            style={{
+                                                                color: textClassification
+                                                                    ? 'OrangeRed'
+                                                                    : 'DodgerBlue'
+                                                            }}
+                                                        >
+                                                            {' '}
+                                                            {textClassification
+                                                                ? 'Alarm'
+                                                                : 'Not alarm'}
+                                                        </span>
+                                                        <span>
+                                                            {' '}
+                                                            {isAlarm ==
+                                                            textClassification
+                                                                ? '✅'
+                                                                : '❌'}
+                                                        </span>
+                                                    </div>
+                                                );
+                                            }
+                                        )}
                             </span>
                             <div
                                 className="clip-similarities"
