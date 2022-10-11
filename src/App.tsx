@@ -5,7 +5,6 @@ import Plot from 'react-plotly.js';
 
 import chroma from 'chroma-js';
 
-import './App.css';
 import { useEffectOnce, useLocalStorage } from 'react-use';
 import { createWatchProgram } from 'typescript';
 
