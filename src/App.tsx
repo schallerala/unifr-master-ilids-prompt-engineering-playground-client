@@ -6,7 +6,6 @@ import Plot from 'react-plotly.js';
 import chroma from 'chroma-js';
 
 import { useEffectOnce, useLocalStorage } from 'react-use';
-import { createWatchProgram } from 'typescript';
 
 const API_BASE_URL = 'http://localhost:8000';
 
@@ -53,18 +52,27 @@ interface SimilarityResponse {
     confusion: Map<number, ConfusionTopK>;
 }
 
-function renderConfusionPopulation(population: number | null): string {
-    return population ? `${population}` : '-';
+interface ClipIndex {
+    index: string;
+    category: string;
+    isAlarm: boolean;
+    distance?: number;
+    approach?: string;
+    description?: string;
 }
 
-async function queryAllClips(): Promise<{ index: string; category: string }[]> {
+async function queryAllClips(): Promise<ClipIndex[]> {
     const response = await fetch(API_BASE_URL + '/images');
     if (!response.ok) return Promise.reject(response);
 
     const responseObj = await response.json();
     return responseObj.index.map((clip: string, i: number) => ({
         index: clip,
-        category: responseObj.categories[i]
+        category: responseObj.categories[i],
+        isAlarm: responseObj.categories[i] === 'Alarm',
+        distance: responseObj.distances[i],
+        approach: responseObj.approaches[i],
+        description: responseObj.descriptions[i]
     }));
 }
 
@@ -79,20 +87,6 @@ async function queryAllTexts(): Promise<
         text,
         classification: responseObj.classification[i]
     }));
-}
-
-async function postText(text: string, classification: boolean) {
-    const response = await fetch(API_BASE_URL + '/text/add', {
-        method: 'POST',
-        body: JSON.stringify({
-            text,
-            classification
-        }),
-        headers: {
-            'Content-Type': 'application/json'
-        }
-    });
-    if (!response.ok) return Promise.reject(response);
 }
 
 async function queryImagesFeaturesTsne(
@@ -293,11 +287,47 @@ function getConfusionMatrixData(
     };
 }
 
+function filterClipsByCategory (showAlarms: boolean, showNotAlarms: boolean): (i: ClipIndex) => boolean {
+    return ({ isAlarm }: ClipIndex) => {
+        if (isAlarm)
+        return showAlarms;
+    else
+        return showNotAlarms;
+    }
+}
+
+function filterClipsByWrongTopK (showOnlyWrongTopK: Set<number>, confusionMap: Map<number, ConfusionTopK>): (i: ClipIndex) => boolean {
+    if (showOnlyWrongTopK.size === 0)
+        return () => true;
+
+    return ({ index, isAlarm }: ClipIndex) => {
+        const mismatch = Array.from(showOnlyWrongTopK.values()).some(topK => {
+            // is clip classification a miss match
+            const textClassification = confusionMap.get(topK)?.topkTextClassification.get(index)
+            return isAlarm !== textClassification
+        });
+
+        return mismatch;
+    }
+}
+
+async function queryPlayVideo (clip: string) {
+    const response = await fetch(API_BASE_URL + `/play/${clip}`, {
+        method: 'POST',
+        headers: {
+            'Content-Type': 'application/json'
+        }
+    });
+    if (!response.ok) return Promise.reject(response);
+}
+
 function App() {
     const [isPositive, setPositive] = useState<boolean>(true);
-    const [clips, setClips] = useState<{ index: string; category: string }[]>(
+    const [clips, setClips] = useState<ClipIndex[]>(
         []
     );
+    const [showAlarms, setShowAlarms] = useState<boolean>(true);
+    const [showNotAlarms, setShowNotAlarms] = useState<boolean>(true);
     const [imagesTsne, setImagesTsne] = useState<Plotly.Data[]>();
     const [textsTsne, setTextsTsne] = useState<Plotly.Data[]>();
     const [texts, setTexts] = useState<
@@ -308,6 +338,8 @@ function App() {
         'all-texts',
         []
     );
+    const [showOnlyWrongTopK, setShowOnlyWrongTopK] = useState<Set<number>>(new Set());
+    const [showAllSimilarities, setShowAllSimilarities] = useState<boolean>(false);
     const [similarityMap, setSimilarityMap] = useState<
         Map<string, ClipSimilarity[]>
     >(new Map());
@@ -348,7 +380,9 @@ function App() {
         queryTextsFeaturesTsne().then((textsTsneResponse) =>
             setTextsTsne(transformTsneResponseToPlotly(textsTsneResponse))
         );
-    }, [texts]);
+    }, [texts, setConfusionMap, setSimilarityMap, setLocalText, setTextsTsne]);
+
+    const filteredOutClips = clips.filter(filterClipsByCategory(showAlarms, showNotAlarms)).filter(filterClipsByWrongTopK(showOnlyWrongTopK, confusionMap));
 
     return (
         <div className="App">
@@ -460,7 +494,7 @@ function App() {
                                     queryDeleteText(text).then(() =>
                                         setTexts(
                                             texts.filter(
-                                                (t2) => t2.text != text
+                                                (t2) => t2.text !== text
                                             )
                                         )
                                     )
@@ -472,24 +506,53 @@ function App() {
                     );
                 })}
             </div>
+            <div>Show:
+                <label><input type="checkbox" defaultChecked={showAlarms} onChange={() => setShowAlarms(!showAlarms)} />Alarms</label>
+                <label><input type="checkbox" defaultChecked={showNotAlarms} onChange={() => setShowNotAlarms(!showNotAlarms)} />Not Alarms</label>
+            </div>
+            <div>
+                Show only <b>wrong</b> TOP K:
+                {[1, 3, 5].map(i => {
+                    const topKChecked = showOnlyWrongTopK.has(i);
+                    return <label key={i}>
+                        <input type="checkbox" defaultChecked={topKChecked} onChange={() => {
+                            if (topKChecked) {
+                                // remove
+                                const newSet = new Set(showOnlyWrongTopK)
+                                newSet.delete(i)
+                                setShowOnlyWrongTopK(newSet)
+                            } else {
+                                // add
+                                setShowOnlyWrongTopK(new Set(showOnlyWrongTopK).add(i))
+                            }
+                        }} />
+                        K = {i}
+                    </label>
+                })}
+            </div>
+            <div>Show:
+                <label><input type="checkbox" defaultChecked={showAllSimilarities} onChange={() => setShowAllSimilarities(!showAllSimilarities)} />All similarities score</label>
+            </div>
+            <h2>Clips</h2>
+            <h4>{filteredOutClips.length} / {clips.length}</h4>
             <div
                 className="images"
                 style={{
                     display: 'grid',
-                    gridTemplateColumns: '220px 180px 180px auto',
+                    gridTemplateColumns: '230px 180px 180px auto',
                     margin: '0 auto',
                     maxWidth: '1200px',
                     rowGap: '12px'
                 }}
             >
-                {clips.map(({ index, category }, i) => {
+                {filteredOutClips.map(({ index, isAlarm, category, distance, approach, description }, i) => {
                     const categoryColor = {
                         Alarm: 'OrangeRed',
                         Background: 'DodgerBlue',
                         Distraction: 'ForestGreen'
                     }[category];
 
-                    const isAlarm = category === 'Alarm';
+                    const orderedTopK = Array.from(confusionMap.keys()).sort((a, b) => a - b);
 
                     return (
                         <React.Fragment key={i}>
@@ -499,76 +562,75 @@ function App() {
                                     src={`${API_BASE_URL}/image/${index}`}
                                     style={{ width: '100%' }}
                                 />
-                                <span
+                                <div
                                     style={{
                                         textAlign: 'center',
-                                        display: 'block'
-                                    }}
-                                >
-                                    {index}
-                                </span>
+                                    }}>
+                                    <span>
+                                        {index}{' '}
+                                    </span>
+                                    <span onClick={() => queryPlayVideo(index).catch(e => console.error(e))}>⏯</span>
+                                </div>
                             </div>
-                            <span
+                            <div
                                 className="clip-category"
                                 style={{
-                                    color: categoryColor,
                                     textAlign: 'center'
                                 }}
                             >
-                                {category}
-                            </span>
+                                <div style={{marginBottom: '6px', color: categoryColor }}>
+                                    {category}
+                                </div>
+                                { ! isAlarm
+                                    ? <></>
+                                    : <div style={{fontSize: "0.8em"}}>
+                                        <div>{description}</div>
+                                        <div>{approach}</div>
+                                        <div>{distance}% Screen Height</div>
+                                    </div>
+                                }
+                            </div>
                             <span className="text-classifications">
-                                {confusionMap &&
-                                    Array.from(confusionMap.entries())
-                                        .sort((a, b) => a[0] - b[0])
-                                        .map(
-                                            (
-                                                [
-                                                    topk,
-                                                    { topkTextClassification }
-                                                ],
-                                                ii
-                                            ) => {
-                                                const keyI =
-                                                    i * clips.length + ii;
-                                                if (
-                                                    !topkTextClassification.has(
-                                                        index
-                                                    )
-                                                )
-                                                    console.warn(
-                                                        `Missing ${index} in topk map`
-                                                    );
-                                                const textClassification =
-                                                    !!topkTextClassification.get(
-                                                        index
-                                                    );
-                                                return (
-                                                    <div key={keyI}>
-                                                        TOP {topk}:
-                                                        <span
-                                                            style={{
-                                                                color: textClassification
-                                                                    ? 'OrangeRed'
-                                                                    : 'DodgerBlue'
-                                                            }}
-                                                        >
-                                                            {' '}
-                                                            {textClassification
-                                                                ? 'Alarm'
-                                                                : 'Not alarm'}
-                                                        </span>
-                                                        <span>
-                                                            {' '}
-                                                            {isAlarm ==
-                                                            textClassification
-                                                                ? '✅'
-                                                                : '❌'}
-                                                        </span>
-                                                    </div>
-                                                );
-                                            }
-                                        )}
+                                {orderedTopK.map((topk, ii) => {
+                                    const { topkTextClassification } = confusionMap.get(topk)!;
+                                    const keyI = i * clips.length + ii;
+                                    if (
+                                        !topkTextClassification.has(
+                                            index
+                                        )
+                                    )
+                                        console.warn(
+                                            `Missing ${index} in topk map`
+                                        );
+                                    const textClassification =
+                                        !!topkTextClassification.get(
+                                            index
+                                        );
+                                    return (
+                                        <div key={keyI}>
+                                            TOP {topk}:
+                                            <span
+                                                style={{
+                                                    color: textClassification
+                                                        ? 'OrangeRed'
+                                                        : 'DodgerBlue'
+                                                }}
+                                            >
+                                                {' '}
+                                                {textClassification
+                                                    ? 'Alarm'
+                                                    : 'Not alarm'}
+                                            </span>
+                                            <span>
+                                                {' '}
+                                                {isAlarm ===
+                                                textClassification
+                                                    ? '✅'
+                                                    : '❌'}
+                                            </span>
+                                        </div>
+                                    );
+                                })}
                             </span>
                             <div
                                 className="clip-similarities"
@@ -582,7 +644,7 @@ function App() {
                                 {similarityMap &&
                                     getTopKSimilarity(
                                         similarityMap.get(index),
-                                        6
+                                        showAllSimilarities ? -1 : 6
                                     )?.map((similarity, ii) => {
                                         const keyI = i * clips.length + ii;
                                         return (
