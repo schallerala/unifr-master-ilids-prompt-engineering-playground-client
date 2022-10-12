@@ -9,11 +9,11 @@ import { useEffectOnce, useLocalStorage } from 'react-use';
 
 const API_BASE_URL = 'http://localhost:8000';
 
-type ModelVariation =
-    | 'vit-b-16-16f'
-    | 'vit-b-16-32f'
-    | 'vit-b-16-8f'
-    | 'vit-b-32-8f';
+// type ModelVariation =
+//     | 'vit-b-16-16f'
+//     | 'vit-b-16-32f'
+//     | 'vit-b-16-8f'
+//     | 'vit-b-32-8f';
 
 interface PLotlyDataLayout {
     data: Plotly.Data[];
@@ -90,7 +90,7 @@ async function queryAllTexts(): Promise<
 }
 
 async function queryImagesFeaturesTsne(
-    modelVariation: ModelVariation = 'vit-b-16-8f'
+    modelVariation: string
 ): Promise<TsneCategory[]> {
     const response = await fetch(
         API_BASE_URL + `/tsne-images/${modelVariation}`
@@ -166,15 +166,17 @@ async function queryDeleteText(text: string) {
     if (!response.ok) return Promise.reject(response);
 }
 
-async function querySimilarities(): Promise<SimilarityResponse> {
-    const response = await fetch(API_BASE_URL + `/similarity`, {
-        // body: JSON.stringify({
-        //   text,
-        // }),
-        // headers: {
-        //   'Content-Type': 'application/json'
-        // }
-    });
+async function querySimilarities(
+    modelVariation: string,
+    textClassification: string
+): Promise<SimilarityResponse> {
+    const params = new URLSearchParams();
+    params.append('variation', modelVariation);
+    params.append('text_classification', textClassification);
+
+    const response = await fetch(
+        API_BASE_URL + `/similarity?` + params.toString()
+    );
     if (!response.ok) return Promise.reject(response);
 
     const responseObj = await response.json();
@@ -287,31 +289,50 @@ function getConfusionMatrixData(
     };
 }
 
-function filterClipsByCategory (showAlarms: boolean, showNotAlarms: boolean): (i: ClipIndex) => boolean {
+function filterClipsByCategory(
+    showAlarms: boolean,
+    showNotAlarms: boolean
+): (i: ClipIndex) => boolean {
     return ({ isAlarm }: ClipIndex) => {
-        if (isAlarm)
-        return showAlarms;
-    else
-        return showNotAlarms;
-    }
+        if (isAlarm) return showAlarms;
+        else return showNotAlarms;
+    };
 }
 
-function filterClipsByWrongTopK (showOnlyWrongTopK: Set<number>, confusionMap: Map<number, ConfusionTopK>): (i: ClipIndex) => boolean {
-    if (showOnlyWrongTopK.size === 0)
-        return () => true;
+function filterClipsByWrongTopK(
+    showOnlyWrongTopK: Set<number>,
+    confusionMap: Map<number, ConfusionTopK>
+): (i: ClipIndex) => boolean {
+    if (showOnlyWrongTopK.size === 0) return () => true;
 
     return ({ index, isAlarm }: ClipIndex) => {
-        const mismatch = Array.from(showOnlyWrongTopK.values()).some(topK => {
+        const mismatch = Array.from(showOnlyWrongTopK.values()).some((topK) => {
             // is clip classification a miss match
-            const textClassification = confusionMap.get(topK)?.topkTextClassification.get(index)
-            return isAlarm !== textClassification
+            const textClassification = confusionMap
+                .get(topK)
+                ?.topkTextClassification.get(index);
+            return isAlarm !== textClassification;
         });
 
         return mismatch;
-    }
+    };
 }
 
-async function queryPlayVideo (clip: string) {
+async function queryAllModelVariations(): Promise<string[]> {
+    const response = await fetch(API_BASE_URL + `/variations`);
+    if (!response.ok) return Promise.reject(response);
+
+    return await response.json();
+}
+
+async function queryAllTextClassificationMethods(): Promise<string[]> {
+    const response = await fetch(API_BASE_URL + `/text-classification`);
+    if (!response.ok) return Promise.reject(response);
+
+    return await response.json();
+}
+
+async function queryPlayVideo(clip: string) {
     const response = await fetch(API_BASE_URL + `/play/${clip}`, {
         method: 'POST',
         headers: {
@@ -322,10 +343,21 @@ async function queryPlayVideo (clip: string) {
 }
 
 function App() {
+    /**
+     * Use to set the classification of the new text
+     */
     const [isPositive, setPositive] = useState<boolean>(true);
-    const [clips, setClips] = useState<ClipIndex[]>(
-        []
-    );
+    const [clips, setClips] = useState<ClipIndex[]>([]);
+    const [modelVariations, setModelVariations] = useState<string[]>([]);
+    const [textClassificationMethods, setTextClassificationMethods] = useState<
+        string[]
+    >([]);
+    const [selectedModelVariation, setSelectedModelVariation] =
+        useState<string>();
+    const [
+        selectedTextClassificationMethod,
+        setSelectedTextClassificationMethod
+    ] = useState<string>();
     const [showAlarms, setShowAlarms] = useState<boolean>(true);
     const [showNotAlarms, setShowNotAlarms] = useState<boolean>(true);
     const [imagesTsne, setImagesTsne] = useState<Plotly.Data[]>();
@@ -338,8 +370,12 @@ function App() {
         'all-texts',
         []
     );
-    const [showOnlyWrongTopK, setShowOnlyWrongTopK] = useState<Set<number>>(new Set());
-    const [showAllSimilarities, setShowAllSimilarities] = useState<boolean>(false);
+    const [showOnlyWrongTopK, setShowOnlyWrongTopK] = useState<Set<number>>(
+        new Set()
+    );
+    const [showAllSimilarities, setShowAllSimilarities] =
+        useState<boolean>(false);
+    const [similarityLoading, setSimilarityLoading] = useState<boolean>(false);
     const [similarityMap, setSimilarityMap] = useState<
         Map<string, ClipSimilarity[]>
     >(new Map());
@@ -350,14 +386,33 @@ function App() {
     const percentageColorScale = chroma.scale(chroma.brewer.Spectral);
 
     useEffectOnce(() => {
-        queryAllClips().then((clipsResponse) => setClips(clipsResponse));
+        queryAllModelVariations().then((variations) => {
+            setModelVariations(variations);
+            setSelectedModelVariation(variations[0]);
+        });
     });
 
     useEffectOnce(() => {
-        queryImagesFeaturesTsne().then((imagesTsneResponse) =>
-            setImagesTsne(transformTsneResponseToPlotly(imagesTsneResponse))
-        );
+        queryAllTextClassificationMethods().then((methods) => {
+            setTextClassificationMethods(methods);
+            setSelectedTextClassificationMethod(methods[0]);
+        });
     });
+
+    useEffectOnce(() => {
+        queryAllClips().then((clipsResponse) => setClips(clipsResponse));
+    });
+
+    useEffect(() => {
+        if (selectedModelVariation) {
+            queryImagesFeaturesTsne(selectedModelVariation).then(
+                (imagesTsneResponse) =>
+                    setImagesTsne(
+                        transformTsneResponseToPlotly(imagesTsneResponse)
+                    )
+            );
+        }
+    }, [selectedModelVariation]);
 
     useEffectOnce(() => {
         const pushAndQueryAllTexts = async () => {
@@ -370,22 +425,98 @@ function App() {
     });
 
     useEffect(() => {
-        if (!(texts && texts.length)) return;
+        if (
+            !(
+                texts &&
+                texts.length &&
+                selectedModelVariation &&
+                selectedTextClassificationMethod
+            )
+        )
+            return;
 
-        querySimilarities().then(({ similarities, confusion }) => {
+        setSimilarityLoading(true);
+        querySimilarities(
+            selectedModelVariation,
+            selectedTextClassificationMethod
+        ).then(({ similarities, confusion }) => {
             setConfusionMap(confusion);
             setSimilarityMap(similarities);
+            setSimilarityLoading(false);
         });
         setLocalText(texts);
         queryTextsFeaturesTsne().then((textsTsneResponse) =>
             setTextsTsne(transformTsneResponseToPlotly(textsTsneResponse))
         );
-    }, [texts, setConfusionMap, setSimilarityMap, setLocalText, setTextsTsne]);
+    }, [
+        texts,
+        selectedModelVariation,
+        selectedTextClassificationMethod,
+        setSimilarityLoading,
+        setConfusionMap,
+        setSimilarityMap,
+        setLocalText,
+        setTextsTsne
+    ]);
 
-    const filteredOutClips = clips.filter(filterClipsByCategory(showAlarms, showNotAlarms)).filter(filterClipsByWrongTopK(showOnlyWrongTopK, confusionMap));
+    const filteredOutClips = clips
+        .filter(filterClipsByCategory(showAlarms, showNotAlarms))
+        .filter(filterClipsByWrongTopK(showOnlyWrongTopK, confusionMap));
 
     return (
         <div className="App">
+            <div style={{ display: 'flex', gap: '40px' }}>
+                <div>
+                    <h3>Model variation selection</h3>
+                    {modelVariations &&
+                        modelVariations.map((variation, i) => {
+                            const checked =
+                                variation === selectedModelVariation;
+                            return (
+                                <React.Fragment key={i}>
+                                    <input
+                                        type="radio"
+                                        name="model_variation"
+                                        id={variation}
+                                        defaultChecked={checked}
+                                        onChange={() =>
+                                            !checked &&
+                                            setSelectedModelVariation(variation)
+                                        }
+                                    />
+                                    <label htmlFor={variation}>
+                                        {variation}
+                                    </label>
+                                </React.Fragment>
+                            );
+                        })}
+                </div>
+                <div>
+                    <h3>Text classification method</h3>
+                    {textClassificationMethods &&
+                        textClassificationMethods.map((method, i) => {
+                            const checked =
+                                method === selectedTextClassificationMethod;
+                            return (
+                                <React.Fragment key={i}>
+                                    <input
+                                        type="radio"
+                                        name="text_classification_method"
+                                        id={method}
+                                        defaultChecked={checked}
+                                        onChange={() =>
+                                            !checked &&
+                                            setSelectedTextClassificationMethod(
+                                                method
+                                            )
+                                        }
+                                    />
+                                    <label htmlFor={method}>{method}</label>
+                                </React.Fragment>
+                            );
+                        })}
+                </div>
+            </div>
             <div
                 className="top"
                 style={{
@@ -441,6 +572,14 @@ function App() {
                     style={{ flex: 1 }}
                 />
             </div>
+            <h4
+                style={{
+                    textAlign: 'center',
+                    visibility: similarityLoading ? 'visible' : 'hidden'
+                }}
+            >
+                Loading...
+            </h4>
             <div
                 style={{
                     display: 'flex',
@@ -506,35 +645,72 @@ function App() {
                     );
                 })}
             </div>
-            <div>Show:
-                <label><input type="checkbox" defaultChecked={showAlarms} onChange={() => setShowAlarms(!showAlarms)} />Alarms</label>
-                <label><input type="checkbox" defaultChecked={showNotAlarms} onChange={() => setShowNotAlarms(!showNotAlarms)} />Not Alarms</label>
+            <div>
+                Show:
+                <label>
+                    <input
+                        type="checkbox"
+                        defaultChecked={showAlarms}
+                        onChange={() => setShowAlarms(!showAlarms)}
+                    />
+                    Alarms
+                </label>
+                <label>
+                    <input
+                        type="checkbox"
+                        defaultChecked={showNotAlarms}
+                        onChange={() => setShowNotAlarms(!showNotAlarms)}
+                    />
+                    Not Alarms
+                </label>
             </div>
             <div>
                 Show only <b>wrong</b> TOP K:
-                {[1, 3, 5].map(i => {
+                {[1, 3, 5].map((i) => {
                     const topKChecked = showOnlyWrongTopK.has(i);
-                    return <label key={i}>
-                        <input type="checkbox" defaultChecked={topKChecked} onChange={() => {
-                            if (topKChecked) {
-                                // remove
-                                const newSet = new Set(showOnlyWrongTopK)
-                                newSet.delete(i)
-                                setShowOnlyWrongTopK(newSet)
-                            } else {
-                                // add
-                                setShowOnlyWrongTopK(new Set(showOnlyWrongTopK).add(i))
-                            }
-                        }} />
-                        K = {i}
-                    </label>
+                    return (
+                        <label key={i}>
+                            <input
+                                type="checkbox"
+                                defaultChecked={topKChecked}
+                                onChange={() => {
+                                    if (topKChecked) {
+                                        // remove
+                                        const newSet = new Set(
+                                            showOnlyWrongTopK
+                                        );
+                                        newSet.delete(i);
+                                        setShowOnlyWrongTopK(newSet);
+                                    } else {
+                                        // add
+                                        setShowOnlyWrongTopK(
+                                            new Set(showOnlyWrongTopK).add(i)
+                                        );
+                                    }
+                                }}
+                            />
+                            K = {i}
+                        </label>
+                    );
                 })}
             </div>
-            <div>Show:
-                <label><input type="checkbox" defaultChecked={showAllSimilarities} onChange={() => setShowAllSimilarities(!showAllSimilarities)} />All similarities score</label>
+            <div>
+                Show:
+                <label>
+                    <input
+                        type="checkbox"
+                        defaultChecked={showAllSimilarities}
+                        onChange={() =>
+                            setShowAllSimilarities(!showAllSimilarities)
+                        }
+                    />
+                    All similarities score
+                </label>
             </div>
             <h2>Clips</h2>
-            <h4>{filteredOutClips.length} / {clips.length}</h4>
+            <h4>
+                {filteredOutClips.length} / {clips.length}
+            </h4>
             <div
                 className="images"
                 style={{
@@ -545,169 +721,205 @@ function App() {
                     rowGap: '12px'
                 }}
             >
-                {filteredOutClips.map(({ index, isAlarm, category, distance, approach, description }, i) => {
-                    const categoryColor = {
-                        Alarm: 'OrangeRed',
-                        Background: 'DodgerBlue',
-                        Distraction: 'ForestGreen'
-                    }[category];
+                {filteredOutClips
+                    .slice(0, 20)
+                    .map(
+                        (
+                            {
+                                index,
+                                isAlarm,
+                                category,
+                                distance,
+                                approach,
+                                description
+                            },
+                            i
+                        ) => {
+                            const categoryColor = {
+                                Alarm: 'OrangeRed',
+                                Background: 'DodgerBlue',
+                                Distraction: 'ForestGreen'
+                            }[category];
 
-                    const orderedTopK = Array.from(confusionMap.keys()).sort((a, b) => a - b);
+                            const orderedTopK = Array.from(
+                                confusionMap.keys()
+                            ).sort((a, b) => a - b);
 
-                    return (
-                        <React.Fragment key={i}>
-                            <div>
-                                <img
-                                    className="clip-preview"
-                                    src={`${API_BASE_URL}/image/${index}`}
-                                    style={{ width: '100%' }}
-                                />
-                                <div
-                                    style={{
-                                        textAlign: 'center',
-                                    }}>
-                                    <span>
-                                        {index}{' '}
-                                    </span>
-                                    <span onClick={() => queryPlayVideo(index).catch(e => console.error(e))}>⏯</span>
-                                </div>
-                            </div>
-                            <div
-                                className="clip-category"
-                                style={{
-                                    textAlign: 'center'
-                                }}
-                            >
-                                <div style={{marginBottom: '6px', color: categoryColor }}>
-                                    {category}
-                                </div>
-                                { ! isAlarm
-                                    ? <></>
-                                    : <div style={{fontSize: "0.8em"}}>
-                                        <div>{description}</div>
-                                        <div>{approach}</div>
-                                        <div>{distance}% Screen Height</div>
-                                    </div>
-                                }
-                            </div>
-                            <span className="text-classifications">
-                                {orderedTopK.map((topk, ii) => {
-                                    const { topkTextClassification } = confusionMap.get(topk)!;
-                                    const keyI = i * clips.length + ii;
-                                    if (
-                                        !topkTextClassification.has(
-                                            index
-                                        )
-                                    )
-                                        console.warn(
-                                            `Missing ${index} in topk map`
-                                        );
-                                    const textClassification =
-                                        !!topkTextClassification.get(
-                                            index
-                                        );
-                                    return (
-                                        <div key={keyI}>
-                                            TOP {topk}:
+                            return (
+                                <React.Fragment key={i}>
+                                    <div>
+                                        <img
+                                            className="clip-preview"
+                                            src={`${API_BASE_URL}/image/${index}`}
+                                            style={{ width: '100%' }}
+                                        />
+                                        <div
+                                            style={{
+                                                textAlign: 'center'
+                                            }}
+                                        >
+                                            <span>{index} </span>
                                             <span
-                                                style={{
-                                                    color: textClassification
-                                                        ? 'OrangeRed'
-                                                        : 'DodgerBlue'
-                                                }}
+                                                onClick={() =>
+                                                    queryPlayVideo(index).catch(
+                                                        (e) => console.error(e)
+                                                    )
+                                                }
                                             >
-                                                {' '}
-                                                {textClassification
-                                                    ? 'Alarm'
-                                                    : 'Not alarm'}
-                                            </span>
-                                            <span>
-                                                {' '}
-                                                {isAlarm ===
-                                                textClassification
-                                                    ? '✅'
-                                                    : '❌'}
+                                                ⏯
                                             </span>
                                         </div>
-                                    );
-                                })}
-                            </span>
-                            <div
-                                className="clip-similarities"
-                                style={{
-                                    display: 'flex',
-                                    flexDirection: 'column',
-                                    gap: '4px',
-                                    maxWidth: '520px'
-                                }}
-                            >
-                                {similarityMap &&
-                                    getTopKSimilarity(
-                                        similarityMap.get(index),
-                                        showAllSimilarities ? -1 : 6
-                                    )?.map((similarity, ii) => {
-                                        const keyI = i * clips.length + ii;
-                                        return (
-                                            <div
-                                                key={keyI}
-                                                style={{
-                                                    display: 'flex',
-                                                    gap: '6px'
-                                                }}
-                                            >
-                                                <div
-                                                    className="similarity-percentage-representation"
-                                                    style={{
-                                                        height: '24px',
-                                                        background: '#e2e2e2',
-                                                        width: '160px'
-                                                    }}
-                                                >
-                                                    <div
+                                    </div>
+                                    <div
+                                        className="clip-category"
+                                        style={{
+                                            textAlign: 'center'
+                                        }}
+                                    >
+                                        <div
+                                            style={{
+                                                marginBottom: '6px',
+                                                color: categoryColor
+                                            }}
+                                        >
+                                            {category}
+                                        </div>
+                                        {!isAlarm ? (
+                                            <></>
+                                        ) : (
+                                            <div style={{ fontSize: '0.8em' }}>
+                                                <div>{description}</div>
+                                                <div>{approach}</div>
+                                                <div>
+                                                    {distance}% Screen Height
+                                                </div>
+                                            </div>
+                                        )}
+                                    </div>
+                                    <span className="text-classifications">
+                                        {orderedTopK.map((topk, ii) => {
+                                            const { topkTextClassification } =
+                                                confusionMap.get(topk)!;
+                                            const keyI = i * clips.length + ii;
+                                            if (
+                                                !topkTextClassification.has(
+                                                    index
+                                                )
+                                            )
+                                                console.warn(
+                                                    `Missing ${index} in topk map`
+                                                );
+                                            const textClassification =
+                                                !!topkTextClassification.get(
+                                                    index
+                                                );
+                                            return (
+                                                <div key={keyI}>
+                                                    TOP {topk}:
+                                                    <span
                                                         style={{
-                                                            width: `${
+                                                            color: textClassification
+                                                                ? 'OrangeRed'
+                                                                : 'DodgerBlue'
+                                                        }}
+                                                    >
+                                                        {' '}
+                                                        {textClassification
+                                                            ? 'Alarm'
+                                                            : 'Not alarm'}
+                                                    </span>
+                                                    <span>
+                                                        {' '}
+                                                        {isAlarm ===
+                                                        textClassification
+                                                            ? '✅'
+                                                            : '❌'}
+                                                    </span>
+                                                </div>
+                                            );
+                                        })}
+                                    </span>
+                                    <div
+                                        className="clip-similarities"
+                                        style={{
+                                            display: 'flex',
+                                            flexDirection: 'column',
+                                            gap: '4px',
+                                            maxWidth: '520px'
+                                        }}
+                                    >
+                                        {similarityMap &&
+                                            getTopKSimilarity(
+                                                similarityMap.get(index),
+                                                showAllSimilarities ? -1 : 6
+                                            )?.map((similarity, ii) => {
+                                                const keyI =
+                                                    i * clips.length + ii;
+                                                return (
+                                                    <div
+                                                        key={keyI}
+                                                        style={{
+                                                            display: 'flex',
+                                                            gap: '6px'
+                                                        }}
+                                                    >
+                                                        <div
+                                                            className="similarity-percentage-representation"
+                                                            style={{
+                                                                height: '24px',
+                                                                background:
+                                                                    '#e2e2e2',
+                                                                width: '160px'
+                                                            }}
+                                                        >
+                                                            <div
+                                                                style={{
+                                                                    width: `${
+                                                                        similarity.similarity *
+                                                                        100
+                                                                    }%`,
+                                                                    height: '100%',
+                                                                    backgroundColor:
+                                                                        percentageColorScale(
+                                                                            similarity.similarity
+                                                                        ).css()
+                                                                }}
+                                                            ></div>
+                                                        </div>
+                                                        <span
+                                                            className="similarity-percentage"
+                                                            style={{
+                                                                width: '45px',
+                                                                textAlign:
+                                                                    'right'
+                                                            }}
+                                                        >
+                                                            {(
                                                                 similarity.similarity *
                                                                 100
-                                                            }%`,
-                                                            height: '100%',
-                                                            backgroundColor:
-                                                                percentageColorScale(
-                                                                    similarity.similarity
-                                                                ).css()
-                                                        }}
-                                                    ></div>
-                                                </div>
-                                                <span
-                                                    className="similarity-percentage"
-                                                    style={{
-                                                        width: '45px',
-                                                        textAlign: 'right'
-                                                    }}
-                                                >
-                                                    {(
-                                                        similarity.similarity *
-                                                        100
-                                                    ).toFixed(2)}
-                                                </span>
-                                                <span
-                                                    className="similarity-text"
-                                                    style={{
-                                                        flex: 1,
-                                                        textAlign: 'left',
-                                                        color: similarity.classification
-                                                            ? 'OrangeRed'
-                                                            : 'DodgerBlue'
-                                                    }}
-                                                >
-                                                    {similarity.text}
-                                                </span>
-                                            </div>
-                                        );
-                                    })}
-                            </div>
-                        </React.Fragment>
-                    );
-                })}
+                                                            ).toFixed(2)}
+                                                        </span>
+                                                        <span
+                                                            className="similarity-text"
+                                                            style={{
+                                                                flex: 1,
+                                                                textAlign:
+                                                                    'left',
+                                                                color: similarity.classification
+                                                                    ? 'OrangeRed'
+                                                                    : 'DodgerBlue'
+                                                            }}
+                                                        >
+                                                            {similarity.text}
+                                                        </span>
+                                                    </div>
+                                                );
+                                            })}
+                                    </div>
+                                </React.Fragment>
+                            );
+                        }
+                    )}
             </div>
         </div>
     );
