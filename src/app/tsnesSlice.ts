@@ -43,6 +43,8 @@ type FetchTsneTextsProps = {
 export const fetchTsneTexts = createAsyncThunk(
     'tsnes/fetchTexts',
     async ({ texts: [texts, classifications] }: FetchTsneTextsProps) => {
+        if (texts.length <= 5) return Promise.resolve([]);
+
         const response = await fetch(API_BASE_URL + '/tsne-texts', {
             method: 'POST',
             body: JSON.stringify({

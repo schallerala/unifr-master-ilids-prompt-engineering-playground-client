@@ -1,6 +1,7 @@
 import { createAsyncThunk, createSlice, PayloadAction } from '@reduxjs/toolkit';
 import { RootState } from './store';
 import { TextClassification } from '../types';
+import { text } from 'stream/consumers';
 
 interface TextsState {
     list: TextClassification[];
@@ -35,8 +36,11 @@ export const textsSlice = createSlice({
         ) => {
             state.list = [
                 ...state.list,
-                { text: payload.text, classification: payload.classification }
-            ];
+                {
+                    text: payload.text.toLowerCase(),
+                    classification: payload.classification
+                }
+            ].sort((a, b) => a.text.localeCompare(b.text));
         },
         setTexts: (
             state,
@@ -44,10 +48,19 @@ export const textsSlice = createSlice({
                 payload
             }: PayloadAction<{ text: string; classification: boolean }[]>
         ) => {
-            state.list = payload;
+            state.list = payload
+                .slice()
+                .sort((a, b) => a.text.localeCompare(b.text))
+                .map((t) => ({
+                    text: t.text.toLowerCase(),
+                    classification: t.classification
+                }));
         },
         removeText: (state, { payload }: PayloadAction<string>) => {
-            state.list = state.list.slice().filter((t) => t.text !== payload);
+            state.list = state.list
+                .slice()
+                .filter((t) => t.text !== payload)
+                .sort((a, b) => a.text.localeCompare(b.text));
         },
         toggleTextClassification: (
             state,
@@ -79,7 +92,8 @@ export const textsSlice = createSlice({
 export const { addText, setTexts, removeText, toggleTextClassification } =
     textsSlice.actions;
 
-export const selectTexts = (state: RootState) =>
-    state.texts.list.slice().sort((a, b) => a.text.localeCompare(b.text));
+export const selectTexts = (state: RootState) => state.texts.list;
+
+export const selectTextsLength = (state: RootState) => state.texts.list.length;
 
 export default textsSlice.reducer;

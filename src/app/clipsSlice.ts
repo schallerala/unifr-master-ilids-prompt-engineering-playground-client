@@ -1,7 +1,7 @@
 import { createAsyncThunk, createSlice, PayloadAction } from '@reduxjs/toolkit';
 import { RootState } from './store';
 import { API_BASE_URL } from '../contants';
-import { ClipIndex } from '../types';
+import { ClipIndex, ConfusionTopK } from '../types';
 
 export const fetchClips = createAsyncThunk('clips/fetch', async () => {
     const response = await fetch(API_BASE_URL + '/images');
@@ -101,15 +101,19 @@ export const {
 
 export const selectClipsLoading = (state: RootState) => state.clips.loading;
 export const selectClips = (state: RootState) => state.clips.list;
-export const selectFilteredClipsByCategory = (state: RootState) => {
+export const selectTotalClips = (state: RootState) => state.clips.list.length;
+export const selectFilteredClips = (state: RootState) => {
     const {
         list,
         filtering: { showAlarms, showNotAlarms }
     } = state.clips;
 
-    const filtered = list.filter(
-        filterClipsByCategory(showAlarms, showNotAlarms)
-    );
+    const { showOnlyWrongTopK } = state.clips.filtering;
+    const { confusionsMap } = state.similarities;
+
+    const filtered = list
+        .filter(filterClipsByCategory(showAlarms, showNotAlarms))
+        .filter(filterClipsByWrongTopK(showOnlyWrongTopK, confusionsMap));
 
     return filtered;
 };
@@ -124,5 +128,23 @@ function filterClipsByCategory(
     return ({ isAlarm }: ClipIndex) => {
         if (isAlarm) return showAlarms;
         else return showNotAlarms;
+    };
+}
+
+function filterClipsByWrongTopK(
+    showOnlyWrongTopK: number[],
+    confusionMap: { [key: number]: ConfusionTopK }
+): (i: ClipIndex) => boolean {
+    if (showOnlyWrongTopK.length === 0) return () => true;
+
+    return ({ index, isAlarm }: ClipIndex) => {
+        const mismatch = Array.from(showOnlyWrongTopK.values()).some((topK) => {
+            // is clip classification a miss match
+            const textClassification =
+                confusionMap[topK].topk_text_classification[index];
+            return isAlarm !== textClassification;
+        });
+
+        return mismatch;
     };
 }

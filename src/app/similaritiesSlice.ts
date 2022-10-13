@@ -93,32 +93,6 @@ export const selectSimilaritiesMap = (state: RootState) =>
 export const selectShowAllSimilarities = (state: RootState) =>
     state.similarities.topk <= 0;
 export const selectTopKSliceEnd = (state: RootState) => state.similarities.topk;
-// export const selectTopKClipsSimilarities = (state: RootState) => {
-//     return state.similarities;
-
-//     // const orderedSimilarities = group(
-//     //     Object.entries(similaritiesMap)
-//     //         .flatMap(([clip, similarities]) =>
-//     //             similarities.map(({ text, classification, similarity }) => ({
-//     //                 clip,
-//     //                 text,
-//     //                 classification,
-//     //                 similarity
-//     //             }))
-//     //         )
-//     //         .sort((a, b) => -(a.similarity - b.similarity)),
-//     //     (flatSimilarity) => flatSimilarity.clip
-//     // );
-
-//     // const slicedMap = new Map(
-//     //     Object.entries(orderedSimilarities).map(([clip, similarities]) => [
-//     //         clip,
-//     //         similarities.slice(0, sliceEnd)
-//     //     ])
-//     // );
-
-//     return {} as typeof similaritiesMap;
-// };
 export const selectConfusionsMap = (state: RootState) =>
     state.similarities.confusionsMap;
 

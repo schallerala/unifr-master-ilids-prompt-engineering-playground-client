@@ -5,42 +5,16 @@ import ConfusionMatrices from './ConfusionMatrices';
 import Texts from './Texts';
 import FilterClips from './FilterClips';
 import Clips from './Clips';
+import LoadingIndicator from './LoadingIndicator';
 
 function App() {
-    //     setSimilarityLoading(true);
-    //     querySimilarities(
-    //         linearizeTextClassification(texts),
-    //         selectedModelVariation,
-    //         selectedTextClassificationMethod
-    //     ).then(({ similarities, confusion }) => {
-    //         setConfusionMap(confusion);
-    //         setSimilarityMap(similarities);
-    //         setSimilarityLoading(false);
-    //     });
-    //     setLocalText(texts);
-
-    // }, [
-    //     texts,
-    //     setSimilarityLoading,
-    //     setConfusionMap,
-    //     setSimilarityMap,
-    //     setLocalText,
-    // ]);
-
     return (
         <div className="App">
             <Options />
             <AddText />
             <Tsne />
 
-            {/* <h4
-                style={{
-                    textAlign: 'center',
-                    visibility: similarityLoading ? 'visible' : 'hidden'
-                }}
-            >
-                Loading...
-            </h4> */}
+            <LoadingIndicator />
 
             <ConfusionMatrices />
             <Texts />
