@@ -29,7 +29,10 @@ export const fetchTsneImages = createAsyncThunk(
         lastTsneImagesAbortController = new AbortController();
 
         const response = await fetch(
-            API_BASE_URL + `/tsne-images/${modelVariation}`
+            API_BASE_URL + `/tsne-images/${modelVariation}`,
+            {
+                signal: lastTsneImagesAbortController.signal
+            }
         );
 
         lastTsneImagesAbortController = undefined;
@@ -74,7 +77,8 @@ export const fetchTsneTexts = createAsyncThunk(
             }),
             headers: {
                 'Content-Type': 'application/json'
-            }
+            },
+            signal: lastTsneTextsAbortController.signal
         });
 
         lastTsneTextsAbortController = undefined;
