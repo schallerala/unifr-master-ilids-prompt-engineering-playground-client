@@ -16,12 +16,24 @@ interface TsneCategoryResponse {
     y: number[];
 }
 
+let lastTsneImagesAbortController: AbortController | undefined = undefined;
+
 export const fetchTsneImages = createAsyncThunk(
     'tsnes/fetchImages',
     async (modelVariation: string) => {
+        if (lastTsneImagesAbortController) {
+            console.log('Stopping previous fetch');
+            lastTsneImagesAbortController.abort();
+        }
+
+        lastTsneImagesAbortController = new AbortController();
+
         const response = await fetch(
             API_BASE_URL + `/tsne-images/${modelVariation}`
         );
+
+        lastTsneImagesAbortController = undefined;
+
         if (!response.ok) return Promise.reject(response);
 
         const arrayResponse = await response.json();
@@ -40,10 +52,19 @@ type FetchTsneTextsProps = {
     texts: LinearizedTextClassification;
 };
 
+let lastTsneTextsAbortController: AbortController | undefined = undefined;
+
 export const fetchTsneTexts = createAsyncThunk(
     'tsnes/fetchTexts',
     async ({ texts: [texts, classifications] }: FetchTsneTextsProps) => {
         if (texts.length <= 5) return Promise.resolve([]);
+
+        if (lastTsneTextsAbortController) {
+            console.log('Stopping previous fetch');
+            lastTsneTextsAbortController.abort();
+        }
+
+        lastTsneTextsAbortController = new AbortController();
 
         const response = await fetch(API_BASE_URL + '/tsne-texts', {
             method: 'POST',
@@ -55,6 +76,9 @@ export const fetchTsneTexts = createAsyncThunk(
                 'Content-Type': 'application/json'
             }
         });
+
+        lastTsneTextsAbortController = undefined;
+
         if (!response.ok) return Promise.reject(response);
 
         const arrayResponse = await response.json();

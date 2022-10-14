@@ -6,7 +6,6 @@ import {
     ConfusionTopK,
     LinearizedTextClassification
 } from '../types';
-import { group } from 'radash';
 
 export interface SimilarityResponse {
     similarities: { [key: string]: ClipSimilarity[] };
@@ -19,6 +18,8 @@ type FetchProps = {
     textClassification: string;
 };
 
+let lastSimilarityAbortController: AbortController | undefined = undefined;
+
 export const fetchSimilarities = createAsyncThunk(
     'similarities/fetch',
     async ({
@@ -26,6 +27,13 @@ export const fetchSimilarities = createAsyncThunk(
         modelVariation,
         textClassification
     }: FetchProps) => {
+        if (lastSimilarityAbortController) {
+            console.log('Stopping previous fetch');
+            lastSimilarityAbortController.abort();
+        }
+
+        lastSimilarityAbortController = new AbortController();
+
         const response = await fetch(API_BASE_URL + `/similarity`, {
             method: 'POST',
             body: JSON.stringify({
@@ -36,8 +44,12 @@ export const fetchSimilarities = createAsyncThunk(
             }),
             headers: {
                 'Content-Type': 'application/json'
-            }
+            },
+            signal: lastSimilarityAbortController.signal
         });
+
+        lastSimilarityAbortController = undefined;
+
         if (!response.ok) return Promise.reject(response);
 
         const responseObj = await response.json();

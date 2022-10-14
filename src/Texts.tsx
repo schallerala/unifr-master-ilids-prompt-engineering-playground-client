@@ -37,7 +37,7 @@ export default function Texts() {
     }, [texts]);
 
     useEffect(() => {
-        if (modelVariation && textClassification)
+        if (modelVariation && textClassification && texts && texts.length > 1)
             dispatch(
                 fetchSimilarities({
                     texts: linearizeTextClassification(texts),

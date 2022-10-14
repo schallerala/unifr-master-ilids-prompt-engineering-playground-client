@@ -40,7 +40,9 @@ export const textsSlice = createSlice({
                     text: payload.text.toLowerCase(),
                     classification: payload.classification
                 }
-            ].sort((a, b) => a.text.localeCompare(b.text));
+            ]
+                .sort((a, b) => a.text.localeCompare(b.text))
+                .filter((t, i, ts) => i === 0 || t.text !== ts[i - 1].text);
         },
         setTexts: (
             state,
@@ -54,7 +56,8 @@ export const textsSlice = createSlice({
                 .map((t) => ({
                     text: t.text.toLowerCase(),
                     classification: t.classification
-                }));
+                }))
+                .filter((t, i, ts) => i === 0 || t.text !== ts[i - 1].text);
         },
         removeText: (state, { payload }: PayloadAction<string>) => {
             state.list = state.list
@@ -83,7 +86,9 @@ export const textsSlice = createSlice({
                     text: action.payload.text,
                     classification: action.payload.classification
                 }
-            ];
+            ]
+                .sort((a, b) => a.text.localeCompare(b.text))
+                .filter((t, i, ts) => i === 0 || t.text !== ts[i - 1].text);
         });
     }
 });
