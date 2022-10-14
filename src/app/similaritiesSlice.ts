@@ -16,6 +16,7 @@ type FetchProps = {
     texts: LinearizedTextClassification;
     modelVariation: string;
     textClassification: string;
+    subtractionTexts: string | undefined;
 };
 
 let lastSimilarityAbortController: AbortController | undefined = undefined;
@@ -25,7 +26,8 @@ export const fetchSimilarities = createAsyncThunk(
     async ({
         texts: [texts, classifications],
         modelVariation,
-        textClassification
+        textClassification,
+        subtractionTexts
     }: FetchProps) => {
         if (lastSimilarityAbortController) {
             console.log('Stopping previous fetch');
@@ -40,7 +42,14 @@ export const fetchSimilarities = createAsyncThunk(
                 model_variation: modelVariation,
                 text_classification_method: textClassification,
                 texts,
-                classifications
+                classifications,
+                texts_to_subtract:
+                    subtractionTexts && subtractionTexts.length
+                        ? subtractionTexts
+                              .split(',')
+                              .map((t) => t.trim())
+                              .filter((t) => t && t.length)
+                        : null
             }),
             headers: {
                 'Content-Type': 'application/json'

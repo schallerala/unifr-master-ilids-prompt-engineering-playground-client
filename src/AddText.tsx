@@ -1,6 +1,6 @@
 import { useState } from 'react';
 import { useAppDispatch } from './app/hooks';
-import { addText, addTextAsync } from './app/textsSlice';
+import { addText, addTextAsync, setSubtractionTexts } from './app/textsSlice';
 
 export default function AddText() {
     /**
@@ -8,6 +8,8 @@ export default function AddText() {
      */
     const [isPositive, setPositive] = useState<boolean>(true);
     const [inputText, setInputText] = useState<string>('');
+
+    const [subtractionTexts, setSubtractionText] = useState<string>('');
 
     const dispatch = useAppDispatch();
 
@@ -52,6 +54,22 @@ export default function AddText() {
             >
                 {isPositive ? '+' : '-'}
             </span>
+
+            <input
+                style={{
+                    width: '400px',
+                    height: '72px',
+                    fontSize: '40px'
+                }}
+                value={subtractionTexts}
+                onChange={(event) => setSubtractionText(event.target.value)}
+                onKeyUp={(event) => {
+                    if (event.key === 'Enter') {
+                        dispatch(setSubtractionTexts(subtractionTexts));
+                    }
+                }}
+                onBlur={() => dispatch(setSubtractionTexts(subtractionTexts))}
+            />
         </div>
     );
 }

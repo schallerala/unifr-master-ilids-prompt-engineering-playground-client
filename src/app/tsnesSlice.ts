@@ -20,7 +20,13 @@ let lastTsneImagesAbortController: AbortController | undefined = undefined;
 
 export const fetchTsneImages = createAsyncThunk(
     'tsnes/fetchImages',
-    async (modelVariation: string) => {
+    async ({
+        modelVariation,
+        textCount
+    }: {
+        modelVariation: string;
+        textCount: number;
+    }) => {
         if (lastTsneImagesAbortController) {
             console.log('Stopping previous fetch');
             lastTsneImagesAbortController.abort();
@@ -28,8 +34,13 @@ export const fetchTsneImages = createAsyncThunk(
 
         lastTsneImagesAbortController = new AbortController();
 
+        const params = new URLSearchParams();
+        if (textCount > 3) params.append('text_count', textCount.toFixed(0));
+
         const response = await fetch(
-            API_BASE_URL + `/tsne-images/${modelVariation}`,
+            API_BASE_URL +
+                `/tsne-images/${modelVariation}?` +
+                params.toString(),
             {
                 signal: lastTsneImagesAbortController.signal
             }

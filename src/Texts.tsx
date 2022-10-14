@@ -1,5 +1,5 @@
 import React, { useEffect } from 'react';
-import { useEffectOnce, useLocalStorage } from 'react-use';
+import { useLocalStorage } from 'react-use';
 import { useAppDispatch, useAppSelector } from './app/hooks';
 import {
     selectSelectedModelVariation,
@@ -8,8 +8,10 @@ import {
 import { fetchSimilarities } from './app/similaritiesSlice';
 import {
     removeText,
+    selectSubtractionTexts,
     selectTexts,
     setTexts,
+    toggleAllTo,
     toggleTextClassification
 } from './app/textsSlice';
 import { linearizeTextClassification } from './utils';
@@ -26,6 +28,7 @@ export default function Texts() {
     const textClassification = useAppSelector(
         selectSelectedTextClassificationMethod
     );
+    const subtractionTexts = useAppSelector(selectSubtractionTexts);
 
     useEffect(() => {
         if (localTexts) dispatch(setTexts(localTexts));
@@ -42,14 +45,19 @@ export default function Texts() {
                 fetchSimilarities({
                     texts: linearizeTextClassification(texts),
                     modelVariation,
-                    textClassification
+                    textClassification,
+                    subtractionTexts
                 })
             );
-    }, [texts, modelVariation, textClassification]);
+    }, [texts, modelVariation, textClassification, subtractionTexts]);
 
     return (
         <div className="texts">
-            <h2>Texts</h2>
+            <h2>
+                Texts{' '}
+                <span onClick={() => dispatch(toggleAllTo(true))}>🚨</span>{' '}
+                <span onClick={() => dispatch(toggleAllTo(false))}>🔕</span>
+            </h2>
             {texts.map(({ text, classification }, i) => {
                 return (
                     <React.Fragment key={i}>

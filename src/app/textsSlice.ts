@@ -5,10 +5,12 @@ import { text } from 'stream/consumers';
 
 interface TextsState {
     list: TextClassification[];
+    subtractionsText: string | undefined;
 }
 
 const initialState: TextsState = {
-    list: []
+    list: [],
+    subtractionsText: undefined
 };
 
 type AddTextAsyncProp = { text: string; classification: boolean };
@@ -65,6 +67,11 @@ export const textsSlice = createSlice({
                 .filter((t) => t.text !== payload)
                 .sort((a, b) => a.text.localeCompare(b.text));
         },
+        toggleAllTo: (state, { payload }: PayloadAction<boolean>) => {
+            state.list = state.list
+                .slice()
+                .map(({ text }) => ({ text, classification: payload }));
+        },
         toggleTextClassification: (
             state,
             { payload }: PayloadAction<string>
@@ -76,6 +83,10 @@ export const textsSlice = createSlice({
                         ? { text, classification: !classification }
                         : { text, classification }
                 );
+        },
+        setSubtractionTexts: (state, { payload }: PayloadAction<string>) => {
+            state.subtractionsText =
+                payload && payload.length ? payload : undefined;
         }
     },
     extraReducers(builder) {
@@ -94,10 +105,20 @@ export const textsSlice = createSlice({
 });
 
 // Action creators are generated for each case reducer function
-export const { addText, setTexts, removeText, toggleTextClassification } =
-    textsSlice.actions;
+export const {
+    addText,
+    setTexts,
+    removeText,
+    toggleTextClassification,
+    setSubtractionTexts,
+    toggleAllTo
+} = textsSlice.actions;
 
 export const selectTexts = (state: RootState) => state.texts.list;
+
+export const selectSubtractionTexts = (state: RootState) => {
+    return state.texts.subtractionsText;
+};
 
 export const selectTextsLength = (state: RootState) => state.texts.list.length;
 
