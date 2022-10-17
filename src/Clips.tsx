@@ -162,7 +162,7 @@ export default function Clips() {
               return similarity;
           }
         : (similarity: number) => {
-              return (((similarity - minSimilarity) / diff) * 98 + 2) / 100;
+              return (((similarity - minSimilarity) / diff) * 99 + 1) / 100;
           };
 
     const similarityToString = applySoftmax
