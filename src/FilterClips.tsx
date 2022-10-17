@@ -1,5 +1,4 @@
-import React, { useEffect, useState } from 'react';
-import { Set } from 'immutable';
+import React from 'react';
 import { useAppDispatch, useAppSelector } from './app/hooks';
 import {
     selectClipsFiltering,

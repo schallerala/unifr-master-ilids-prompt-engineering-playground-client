@@ -64,14 +64,17 @@ export const fetchTsneImages = createAsyncThunk(
 
 type FetchTsneTextsProps = {
     texts: LinearizedTextClassification;
-    modelVariation: string
+    modelVariation: string;
 };
 
 let lastTsneTextsAbortController: AbortController | undefined = undefined;
 
 export const fetchTsneTexts = createAsyncThunk(
     'tsnes/fetchTexts',
-    async ({ texts: [texts, classifications], modelVariation }: FetchTsneTextsProps) => {
+    async ({
+        texts: [texts, classifications],
+        modelVariation
+    }: FetchTsneTextsProps) => {
         if (texts.length <= 5) return Promise.resolve([]);
 
         if (lastTsneTextsAbortController) {

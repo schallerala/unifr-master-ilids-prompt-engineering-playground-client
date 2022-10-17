@@ -5,7 +5,7 @@ import {
     selectSelectedModelVariation,
     selectSelectedTextClassificationMethod
 } from './app/optionsSlice';
-import { fetchSimilarities } from './app/similaritiesSlice';
+import { fetchSimilarities, selectApplySoftmax } from './app/similaritiesSlice';
 import {
     removeText,
     selectSubtractionTexts,
@@ -30,6 +30,8 @@ export default function Texts() {
     );
     const subtractionTexts = useAppSelector(selectSubtractionTexts);
 
+    const applySoftmax = useAppSelector(selectApplySoftmax);
+
     useEffect(() => {
         if (localTexts) dispatch(setTexts(localTexts));
     }, [dispatch]);
@@ -46,10 +48,17 @@ export default function Texts() {
                     texts: linearizeTextClassification(texts),
                     modelVariation,
                     textClassification,
-                    subtractionTexts
+                    subtractionTexts,
+                    applySoftmax
                 })
             );
-    }, [texts, modelVariation, textClassification, subtractionTexts]);
+    }, [
+        texts,
+        modelVariation,
+        textClassification,
+        subtractionTexts,
+        applySoftmax
+    ]);
 
     return (
         <div className="texts">

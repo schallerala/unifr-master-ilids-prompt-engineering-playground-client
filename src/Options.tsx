@@ -11,6 +11,10 @@ import {
     selectTextClassificationMethod,
     selectTextClassificationMethods
 } from './app/optionsSlice';
+import {
+    selectApplySoftmax,
+    toggleApplySoftmax
+} from './app/similaritiesSlice';
 
 export default function Options() {
     const dispatch = useAppDispatch();
@@ -24,6 +28,8 @@ export default function Options() {
     const selectedTextClassificationMethod = useAppSelector(
         selectSelectedTextClassificationMethod
     );
+
+    const applySoftmax = useAppSelector(selectApplySoftmax);
 
     useEffect(() => {
         dispatch(fetchModelVariations());
@@ -96,6 +102,19 @@ export default function Options() {
                             </React.Fragment>
                         );
                     })}
+            </div>
+            <div>
+                <h3>Softmax</h3>
+                <input
+                    type="checkbox"
+                    name="apply-softmax"
+                    id="apply-softmax"
+                    onChange={() => dispatch(toggleApplySoftmax())}
+                    defaultChecked={applySoftmax}
+                />
+                <label htmlFor="apply-softmax">
+                    Apply Softmax to similarities
+                </label>
             </div>
         </div>
     );

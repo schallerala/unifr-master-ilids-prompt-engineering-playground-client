@@ -10,7 +10,10 @@ import {
 } from './app/clipsSlice';
 import { useAppDispatch, useAppSelector } from './app/hooks';
 import {
+    selectApplySoftmax,
     selectConfusionsMap,
+    selectMaxSimilarity,
+    selectMinSimilarity,
     selectSimilaritiesMap,
     selectTopKSliceEnd
 } from './app/similaritiesSlice';
@@ -24,7 +27,11 @@ export default function Clips() {
     const filteredOutClips = useAppSelector(selectFilteredClips);
     const confusionsMap = useAppSelector(selectConfusionsMap);
     const similarities = useAppSelector(selectSimilaritiesMap);
+    const minSimilarity = useAppSelector(selectMinSimilarity);
+    const maxSimilarity = useAppSelector(selectMaxSimilarity);
     const similaritiesTopK = useAppSelector(selectTopKSliceEnd);
+
+    const applySoftmax = useAppSelector(selectApplySoftmax);
 
     useEffect(() => {
         dispatch(fetchClips());
@@ -148,6 +155,24 @@ export default function Clips() {
         );
     }
 
+    const diff = maxSimilarity - minSimilarity;
+
+    const similarityPercentage = applySoftmax
+        ? (similarity: number) => {
+              return similarity;
+          }
+        : (similarity: number) => {
+              return (((similarity - minSimilarity) / diff) * 98 + 2) / 100;
+          };
+
+    const similarityToString = applySoftmax
+        ? (similarity: number) => {
+              return (similarity * 100).toFixed(2);
+          }
+        : (similarity: number) => {
+              return similarity.toFixed(2);
+          };
+
     function renderSimilarities(rowIndex: number, colIndex: number) {
         const { index } = filteredOutClips[rowIndex];
 
@@ -162,11 +187,12 @@ export default function Clips() {
                     maxWidth: '520px'
                 }}
             >
-                {similarities[index] &&
+                {index in similarities &&
                     similarities[index]
                         .slice(0, similaritiesTopK)
-                        .map((similarity, ii) => {
+                        .map((similarity) => {
                             const keyI = `${rowIndex}-${similarity.text}`;
+
                             return (
                                 <div
                                     key={keyI}
@@ -186,12 +212,16 @@ export default function Clips() {
                                         <div
                                             style={{
                                                 width: `${
-                                                    similarity.similarity * 100
+                                                    similarityPercentage(
+                                                        similarity.similarity
+                                                    ) * 100
                                                 }%`,
                                                 height: '100%',
                                                 backgroundColor:
                                                     percentageColorScale(
-                                                        similarity.similarity
+                                                        similarityPercentage(
+                                                            similarity.similarity
+                                                        )
                                                     ).css()
                                             }}
                                         ></div>
@@ -203,8 +233,8 @@ export default function Clips() {
                                             textAlign: 'right'
                                         }}
                                     >
-                                        {(similarity.similarity * 100).toFixed(
-                                            2
+                                        {similarityToString(
+                                            similarity.similarity
                                         )}
                                     </span>
                                     <span
