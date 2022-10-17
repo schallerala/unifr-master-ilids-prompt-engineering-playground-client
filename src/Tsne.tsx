@@ -28,14 +28,15 @@ export default function Tsne() {
     }, [modelVariation, texts]);
 
     useEffect(() => {
-        if (texts && texts.length > 0) {
+        if (texts && texts.length > 0 && modelVariation) {
             dispatch(
                 fetchTsneTexts({
-                    texts: linearizeTextClassification(texts)
+                    texts: linearizeTextClassification(texts),
+                    modelVariation
                 })
             );
         }
-    }, [texts]);
+    }, [texts, modelVariation]);
 
     return (
         <div className="tsne-plots" style={{ display: 'flex', gap: '20px' }}>
