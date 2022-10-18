@@ -170,7 +170,7 @@ export default function Clips() {
               return (similarity * 100).toFixed(2);
           }
         : (similarity: number) => {
-              return similarity.toFixed(2);
+              return similarity.toFixed(3);
           };
 
     function renderSimilarities(rowIndex: number, colIndex: number) {
@@ -303,17 +303,19 @@ export default function Clips() {
                 }}
             >
                 {filteredOutClips.length &&
-                    Array.from(range(0, filteredOutClips.length - 1)).map(
-                        (i) => {
-                            return (
-                                <React.Fragment key={i}>
-                                    {renders.map((colRender, ii) =>
-                                        colRender(i, ii)
-                                    )}
-                                </React.Fragment>
-                            );
-                        }
-                    )}
+                    Array.from(range(0, filteredOutClips.length - 1))
+                        .filter(i => filteredOutClips[i].index in similarities)
+                        .map(i => {
+                                return (
+                                    <React.Fragment key={i}>
+                                        {renders.map((colRender, ii) =>
+                                            colRender(i, ii)
+                                        )}
+                                    </React.Fragment>
+                                );
+                            }
+                        )
+                    }
             </div>
         </div>
     );
