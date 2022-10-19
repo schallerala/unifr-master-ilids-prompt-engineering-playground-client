@@ -304,7 +304,7 @@ export default function Clips() {
             >
                 {filteredOutClips.length &&
                     Array.from(range(0, filteredOutClips.length - 1))
-                        .filter(i => filteredOutClips[i].index in similarities)
+                        .filter(i => Object.keys(similarities).length === 0 || filteredOutClips[i].index in similarities)
                         .map(i => {
                                 return (
                                     <React.Fragment key={i}>
