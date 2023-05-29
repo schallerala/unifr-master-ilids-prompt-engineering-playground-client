@@ -1,5 +1,6 @@
 import { configureStore } from '@reduxjs/toolkit';
 import clipsReducer from './clipsSlice';
+import rocReducer from './rocSlice';
 import similaritiesReducer from './similaritiesSlice';
 import tsnesReducer from './tsnesSlice';
 import textsReducer from './textsSlice';
@@ -8,6 +9,7 @@ import optionsReducer from './optionsSlice';
 const store = configureStore({
     reducer: {
         clips: clipsReducer,
+        roc: rocReducer,
         similarities: similaritiesReducer,
         tsnes: tsnesReducer,
         texts: textsReducer,
@@ -21,3 +23,4 @@ export default store;
 export type RootState = ReturnType<typeof store.getState>;
 // Inferred type: {posts: PostsState, comments: CommentsState, users: UsersState}
 export type AppDispatch = typeof store.dispatch;
+

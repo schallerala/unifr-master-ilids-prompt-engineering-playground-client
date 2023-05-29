@@ -6,6 +6,7 @@ import Texts from './Texts';
 import FilterClips from './FilterClips';
 import Clips from './Clips';
 import LoadingIndicator from './LoadingIndicator';
+import Roc from './Roc';
 
 function App() {
     return (
@@ -16,7 +17,13 @@ function App() {
 
             <LoadingIndicator />
 
-            <ConfusionMatrices />
+            <div style={{
+                display: 'flex',
+                flexDirection: 'row',
+            }}>
+                <Roc />
+                <ConfusionMatrices />
+            </div>
             <Texts />
             <FilterClips />
             <Clips />
