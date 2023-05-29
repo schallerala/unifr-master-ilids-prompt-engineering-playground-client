@@ -22,10 +22,10 @@ export const fetchTsneImages = createAsyncThunk(
     'tsnes/fetchImages',
     async ({
         modelVariation,
-        textCount
+        texts
     }: {
         modelVariation: string;
-        textCount: number;
+        texts: string[];
     }) => {
         if (lastTsneImagesAbortController) {
             console.log('Stopping previous fetch');
@@ -34,14 +34,18 @@ export const fetchTsneImages = createAsyncThunk(
 
         lastTsneImagesAbortController = new AbortController();
 
-        const params = new URLSearchParams();
-        if (textCount > 3) params.append('text_count', textCount.toFixed(0));
-
         const response = await fetch(
             API_BASE_URL +
-                `/tsne-images/${modelVariation}?` +
-                params.toString(),
+                '/tsne-images',
             {
+                method: 'POST',
+                body: JSON.stringify({
+                    texts,
+                    model_variation: modelVariation
+                }),
+                headers: {
+                    'Content-Type': 'application/json'
+                },
                 signal: lastTsneImagesAbortController.signal
             }
         );
@@ -75,8 +79,6 @@ export const fetchTsneTexts = createAsyncThunk(
         texts: [texts, classifications],
         modelVariation
     }: FetchTsneTextsProps) => {
-        if (texts.length <= 5) return Promise.resolve([]);
-
         if (lastTsneTextsAbortController) {
             console.log('Stopping previous fetch');
             lastTsneTextsAbortController.abort();
@@ -164,12 +166,13 @@ export const selectTsneLoadingTexts = (state: RootState) =>
     state.tsnes.textTsneLoading;
 export const selectTsneTexts = (state: RootState) => state.tsnes.textTsne;
 export const selectTsneTextsPlotlyData = (state: RootState) =>
-    transformTsneResponseToPlotly(state.tsnes.textTsne);
+    transformTsneResponseToPlotly(state.tsnes.textTsne, 'text+markers');
 
 export default tsnesSlice.reducer;
 
 function transformTsneResponseToPlotly(
-    response: TsneCategory[]
+    response: TsneCategory[],
+    mode: 'text+markers' | 'markers' = 'markers',
 ): Plotly.Data[] {
     return response.map(({ x, y, name, text }) => ({
         x,
@@ -177,6 +180,7 @@ function transformTsneResponseToPlotly(
         name,
         text,
         type: 'scatter',
-        mode: 'markers'
+        mode,
+        textposition: 'top center'
     }));
 }

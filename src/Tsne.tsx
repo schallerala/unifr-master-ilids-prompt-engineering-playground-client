@@ -1,6 +1,5 @@
 import { useEffect } from 'react';
 import Plot from 'react-plotly.js';
-import { text } from 'stream/consumers';
 import { useAppDispatch, useAppSelector } from './app/hooks';
 import { selectSelectedModelVariation } from './app/optionsSlice';
 import { selectTexts } from './app/textsSlice';
@@ -23,9 +22,9 @@ export default function Tsne() {
     useEffect(() => {
         if (modelVariation)
             dispatch(
-                fetchTsneImages({ modelVariation, textCount: texts.length })
+                fetchTsneImages({ modelVariation, texts: texts.map((t) => t.text) })
             );
-    }, [modelVariation, texts]);
+    }, [modelVariation, texts, dispatch]);
 
     useEffect(() => {
         if (texts && texts.length > 0 && modelVariation) {
@@ -36,7 +35,7 @@ export default function Tsne() {
                 })
             );
         }
-    }, [texts, modelVariation]);
+    }, [texts, modelVariation, dispatch]);
 
     return (
         <div className="tsne-plots" style={{ display: 'flex', gap: '20px' }}>
